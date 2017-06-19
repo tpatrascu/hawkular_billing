@@ -1,0 +1,10 @@
+cheroot==5.5.0
+CherryPy==10.2.2
+hawkular-client==0.5.3
+portend==1.8
+pypiwin32==220
+pytz==2017.2
+PyYAML==3.12
+six==1.10.0
+SQLAlchemy==1.1.10
+tempora==1.7
