@@ -5,7 +5,8 @@ from sqlalchemy.orm import sessionmaker
 
 # Import models here to run migrations on them
 from model import Base
-from model.namespace import Namespace
+from model.tenant import Tenant
+from model.metric import Metric
 
 from config import config
 
@@ -20,7 +21,7 @@ sa_connect_str = '{0}://{1}:{2}@{3}/{4}'.format(
 
 engine = create_engine(
     sa_connect_str, convert_unicode=True,
-    pool_recycle=3600, pool_size=10)
+    pool_recycle=3600, pool_size=1000)
 db_session = scoped_session(sessionmaker(
     autocommit=False, autoflush=False, bind=engine))
 
