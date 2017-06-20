@@ -1,9 +1,14 @@
 # no keys without a value or cherrypy will fail to start
 
-poller:
-  metrics_definitions_interval: 30
+metrics_poller:
+  redis_host: localhost
+  redis_port: 6379
+  redis_queue_db: 0
+  redis_lock_db: 1
+  get_metrics_definitions_interval: 10
+  get_namespaces_interval: 10
 
-hawkular_api:
+hawkular_metrics_client:
   scheme: https
   host: metrics-openshift-infra.192.168.100.5.xip.io
   port: 443

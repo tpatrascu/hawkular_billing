@@ -1,14 +1,13 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from celery import Celery
 from celery.utils.log import get_task_logger
 import redis
 
 from hawkular.metrics import HawkularMetricsClient, MetricType
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import scoped_session
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
-
+from model.db_pool import db_session
 from model.namespace import Namespace
 
 from contextlib import contextmanager
@@ -16,34 +15,47 @@ from config import config
 
 LOCK_EXPIRE = 10 * 60
 
-app = Celery('tasks', broker='redis://localhost:6379/0')
+# Init Celery
+redis_url = 'redis://{0}:{1}/{2}'.format(
+    config['metrics_poller']['redis_host'],
+    config['metrics_poller']['redis_port'],
+    config['metrics_poller']['redis_queue_db']
+)
+app = Celery('tasks', broker=redis_url)
 logger = get_task_logger(__name__)
 
-sa_connect = '{0}://{1}:{2}@{3}/{4}'.format(
-    config['database']['driver'],
-    config['database']['user'],
-    config['database']['password'],
-    config['database']['host'],
-    config['database']['db']
-)
 
-engine = create_engine(
-    sa_connect, convert_unicode=True,
-    pool_recycle=3600, pool_size=10)
-db_session = scoped_session(sessionmaker(
-    autocommit=False, autoflush=False, bind=engine))
+@app.on_after_configure.connect
+def setup_initial_periodic_tasks(sender, **kwargs):
+    sender.add_periodic_task(
+        config['metrics_poller']['get_metrics_definitions_interval'],
+        get_metrics_definitions.s()
+    )
+    sender.add_periodic_task(
+        config['metrics_poller']['get_namespaces_interval'],
+        get_metrics_definitions.s()
+    )
 
-Base = declarative_base()
-Base.metadata.create_all(engine)
 
-ns = Namespace(name='asdf')
-print(ns)
-db_session.add(ns)
-db_session.commit()
+def hawkular_client(tenant_id):
+    return HawkularMetricsClient(
+        tenant_id=tenant_id,
+        scheme=config['hawkular_metrics_client']['scheme'],
+        host=config['hawkular_metrics_client']['host'],
+        port=config['hawkular_metrics_client']['port'],
+        path=config['hawkular_metrics_client']['path'],
+        token=config['hawkular_metrics_client']['token']
+    )
+
 
 @contextmanager
 def redis_lock(lock_id):
-    r = redis.StrictRedis(host='localhost', port=6379, db=1)
+    """ Redis lock manager to ensure only one instance of a task is running """
+    r = redis.StrictRedis(
+        host=config['metrics_poller']['redis_host'],
+        port=config['metrics_poller']['redis_port'],
+        db=config['metrics_poller']['redis_lock_db']
+    )
 
     status = True
 
@@ -67,21 +79,24 @@ def redis_lock(lock_id):
 
 
 @app.task
-def metrics_definitions():
-    lock_id = 'metrics_definitions_lock'
-    logger.info('Polling metrics definitions')
-
+def get_namespaces():
+    lock_id = 'get_namespaces_lock'
+    logger.info('Try running get_namespaces')
     with redis_lock(lock_id) as locked:
         if not locked:
-            logger.info('polling 4real')
-            client = HawkularMetricsClient(
-                tenant_id='myproject',
-                scheme='https',
-                host='metrics-openshift-infra.192.168.100.5.xip.io',
-                port=443,
-                path='hawkular/metrics',
-                token=token
-            )
-            print(client.query_tenants())
+            logger.info('Running get_namespaces')
+            print(hawkular_client('myproject').query_tenants())
         else:
-            logger.info('Polling metrics definitions task already running')
+            logger.info('get_namespaces task already running')
+
+
+@app.task
+def get_metrics_definitions():
+    lock_id = 'metrics_definitions_lock'
+    logger.info('Try running get_metrics_definitions')
+    with redis_lock(lock_id) as locked:
+        if not locked:
+            logger.info('Running get_metrics_definitions')
+            print(hawkular_client('myproject').get_metrics_definitions())
+        else:
+            logger.info('get_metrics_definitions task already running')
