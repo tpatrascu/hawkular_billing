@@ -1,0 +1,1 @@
+curl -k -H "Authorization: Bearer $(cat ~/hawkular_token)" https://192.168.100.5:8443/api/v1/namespaces

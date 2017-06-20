@@ -5,8 +5,20 @@ import cherrypy
 import yaml
 
 from config import config
-from user_api import UserAPI
-from admin_api import AdminAPI
+
+
+class UserAPI(object):
+    """User API controller"""
+    @cherrypy.expose
+    def index(self):
+        return "user api"
+
+
+class AdminAPI(object):
+    """Admin API controller"""
+    @cherrypy.expose
+    def index(self):
+        return "admin api"
 
 
 def start():
