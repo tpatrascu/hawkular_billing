@@ -11,7 +11,7 @@ from model.tenant import Tenant
 from model.metric import Metric
 
 from config import config
-from utils import dget, redis_lock, hawkular_client
+from utils import dget, redis_lock, hawkular_client, metric_types_map
 
 
 # Init Celery
@@ -28,8 +28,11 @@ worker_db_pool = None
 @app.on_after_configure.connect
 def setup_initial_periodic_tasks(sender, **kwargs):
     sender.add_periodic_task(
-        config['metrics_poller']['get_namespaces_interval'],
+        config['metrics_poller']['get_definitions_interval'],
         get_tenants.s())
+    sender.add_periodic_task(
+        config['metrics_poller']['get_metric_data_interval'],
+        run_get_metrics.s())
 
 
 @worker_process_init.connect
@@ -72,7 +75,7 @@ def get_metrics_definitions(tenant):
             logger.info('Run get_metrics_definitions({})'.format(tenant))
             resp = hawkular_client(tenant).query_metric_definitions()
 
-            logger.info('Update tenants DB table for {} tenant'.format(tenant))
+            logger.info('Update metrics DB table for {} tenant'.format(tenant))
             metrics = map(
                 lambda x: Metric(
                     metric_id=x['id'].replace('/', '%2F'),
@@ -98,5 +101,51 @@ def get_metrics_definitions(tenant):
                                 'min_timestamp': metric.min_timestamp,
                                 'max_timestamp': metric.max_timestamp,
                             })
+        else:
+            logger.info('get_metrics_definitions({}) locked'.format(tenant))
+
+
+@app.task
+def run_get_metrics():
+    lock_id = 'run_get_metrics_lock'
+    logger.info('Try running run_get_metrics')
+    with redis_lock(lock_id) as locked:
+        if not locked:
+            logger.info('Running run_get_metrics')
+            metrics = []
+            with db.session_man(worker_db_pool) as session:
+                metrics = session.query(Metric).all()
+
+            logger.info('Running get_metric_data tasks for all metrics')
+            group(
+                get_metrics_definitions.s(metric.tenant, metric.metric_id)
+                for metric in metrics
+            ).apply_async()
+        else:
+            logger.info('get_tenants task already running')
+
+
+@app.task
+def get_metric_data(tenant, metric_id, metric_type):
+    lock_id = 'metrics_data_{0}_lock'.format(metric_id)
+    logger.info('Try running get_metrics_data({})'.format(metric_id))
+    with redis_lock(lock_id) as locked:
+        if not locked:
+            logger.info('Run get_metrics_data({})'.format(metric_id))
+
+            last_db_timestamp = None
+            with db.session_man(worker_db_pool) as session:
+                last_db_timestamp = session.query.
+                with_entities(MetricData.timestamp).filter_by(
+                    metric_id=metric_id, tenant=tenant
+                ).order_by(timestamp.desc()).first()
+
+            resp = hawkular_client(tenant).query_metric(
+                metric_types_map[metric_type],
+                metric_id,
+                start=-  # now - last_db_timestamp
+            )
+
+            logger.info('Update tenants DB table for {} tenant'.format(tenant))
         else:
             logger.info('get_metrics_definitions({}) locked'.format(tenant))

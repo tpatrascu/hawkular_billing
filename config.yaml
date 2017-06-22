@@ -5,7 +5,8 @@ metrics_poller:
   redis_port: 6379
   redis_queue_db: 0
   redis_lock_db: 1
-  get_namespaces_interval: 30
+  get_definitions_interval: 30
+  get_metric_data_interval: 60
 
 hawkular_metrics_client:
   scheme: https

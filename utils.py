@@ -16,6 +16,12 @@ def dget(_dict, keys, default=None):
     return _dict
 
 
+metric_types_map = {
+    'gauge' = MetricType.Gauge,
+    'counter' = MetricType.Counter,
+}
+
+
 def hawkular_client(tenant_id=''):
     return HawkularMetricsClient(
         tenant_id=tenant_id,
