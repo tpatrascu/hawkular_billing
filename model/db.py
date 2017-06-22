@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError, DBAPIError
 from model import Base
 from model.tenant import Tenant
 from model.metric import Metric
+from model.metric_data import MetricData
 
 from contextlib import contextmanager
 from config import config

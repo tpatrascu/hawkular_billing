@@ -63,7 +63,7 @@ def get_tenants():
                 get_metrics_definitions.s(tenant) for tenant in tenant_ids
             ).apply_async()
         else:
-            logger.info('get_tenants task already running')
+            logger.info('get_tenants() locked')
 
 
 @app.task
@@ -122,7 +122,7 @@ def run_get_metrics():
                 for metric in metrics
             ).apply_async()
         else:
-            logger.info('get_tenants task already running')
+            logger.info('run_get_metrics() locked')
 
 
 @app.task
