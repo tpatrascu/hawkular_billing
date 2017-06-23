@@ -14,7 +14,6 @@ from model.metric_data import MetricData
 from config import config
 from utils import dget, redis_lock, hawkular_client, metric_types_map
 from datetime import datetime, timedelta
-from calendar import timegm
 
 # Init Celery
 redis_url = 'redis://{0}:{1}/{2}'.format(
@@ -45,7 +44,7 @@ def init_worker_db_pool(sender=None, conf=None, **kwargs):
 
 @app.task
 def get_tenants():
-    logger.info('Running get_tenants')
+    logger.info('Run get_tenants')
     logger.info('Updating tenants DB table')
     tenant_ids = [x['id'] for x in hawkular_client().query_tenants()]
     tenants = map(lambda x: Tenant(name=x), tenant_ids)
@@ -55,7 +54,7 @@ def get_tenants():
                     name=tenant.name).count():
                 session.add(tenant)
 
-    logger.info('Running update_metrics_definitions tasks on tenants')
+    logger.info('Run update_metrics_definitions tasks on tenants')
     group(
         update_metrics_definitions.s(tenant) for tenant in tenant_ids
     ).apply_async()
@@ -63,8 +62,6 @@ def get_tenants():
 
 @app.task
 def update_metrics_definitions(tenant):
-    logger.info('Try running update_metrics_definitions')
-
     logger.info('Run update_metrics_definitions({})'.format(tenant))
     resp = hawkular_client(tenant).query_metric_definitions()
 
@@ -102,19 +99,27 @@ def update_metrics_definitions(tenant):
 
     logger.info('Clean metric definitions DB table for {} tenant'.
                 format(tenant))
-    # TODO
+
+    with db.session_man(worker_db_pool) as session:
+        for metric in session.query(Metric).all():
+            if metric.metric_id not in [x['id'] for x in resp]:
+                session.delete(metric)
 
 
 @app.task
 def run_get_metrics():
-    logger.info('Running run_get_metrics')
+    logger.info('Run run_get_metrics')
     metrics = []
     with db.session_man(worker_db_pool) as session:
         metrics = session.query(Metric).all()
 
-        logger.info('Running get_metric_data tasks for all metrics')
+        logger.info('Run get_metric_data tasks for all metrics')
         group(
-            get_metric_data.s(metric.tenant, metric.metric_id, metric.metric_type)
+            get_metric_data.s(
+                metric.tenant,
+                metric.metric_id,
+                metric.metric_type
+            )
             for metric in metrics
         ).apply_async()
 
@@ -130,8 +135,11 @@ def get_metric_data(tenant, metric_id, metric_type):
             metric_id=metric_id, tenant=tenant
         ).order_by(MetricData.timestamp.desc()).first()
 
-    # if no metrics, get metrics for last month
-    time_start = datetime.utcnow() - timedelta(weeks=4)
+    max_days_old = 31
+    if max_days_old in config['metrics_poller']:
+        max_days_old = config['metrics_poller']['max_days_old']
+
+    time_start = datetime.utcnow() - timedelta(days=max_days_old)
     if last_metric_data:
         time_start = last_metric_data.timestamp + timedelta(seconds=1)
 
