@@ -39,7 +39,7 @@ def session_pool():
     returns scoped_session factory
     """
     engine = create_engine(
-        sa_connect_str, convert_unicode=True,
+        sa_connect_str, convert_unicode=True, isolation_level='READ COMMITTED',
         pool_recycle=3600, pool_size=config['database']['pool_size'])
 
     return scoped_session(sessionmaker(

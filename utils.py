@@ -17,8 +17,8 @@ def dget(_dict, keys, default=None):
 
 
 metric_types_map = {
-    'gauge' = MetricType.Gauge,
-    'counter' = MetricType.Counter,
+    'gauge': MetricType.Gauge,
+    'counter': MetricType.Counter,
 }
 
 
