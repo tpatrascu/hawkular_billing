@@ -15,6 +15,35 @@ from config import config
 from utils import dget, redis_lock, hawkular_client, metric_types_map
 from datetime import datetime, timedelta
 
+from hawkular.metrics import HawkularMetricsClient, MetricType
+
+
+metric_types_map = {
+    'gauge': MetricType.Gauge,
+    'counter': MetricType.Counter,
+}
+
+
+def hawkular_client(tenant_id=''):
+    return HawkularMetricsClient(
+        tenant_id=tenant_id,
+        scheme=config['hawkular_metrics_client']['scheme'],
+        host=config['hawkular_metrics_client']['host'],
+        port=config['hawkular_metrics_client']['port'],
+        path=config['hawkular_metrics_client']['path'],
+        token=config['hawkular_metrics_client']['token']
+    )
+
+
+def dget(_dict, keys, default=None):
+    for key in keys:
+        if isinstance(_dict, dict):
+            _dict = _dict.get(key, default)
+        else:
+            return default
+    return _dict
+
+
 # Init Celery
 redis_url = 'redis://{0}:{1}/{2}'.format(
     config['metrics_poller']['redis_host'],
@@ -29,10 +58,10 @@ worker_db_pool = None
 @app.on_after_configure.connect
 def setup_initial_periodic_tasks(sender, **kwargs):
     sender.add_periodic_task(
-        config['metrics_poller']['get_definitions_interval'],
+        config['metrics_poller']['get_definitions_interval_sec'],
         get_tenants.s())
     sender.add_periodic_task(
-        config['metrics_poller']['get_metric_data_interval'],
+        config['metrics_poller']['bucketDuration_sec'] + 1,
         run_get_metrics.s())
 
 
@@ -44,8 +73,8 @@ def init_worker_db_pool(sender=None, conf=None, **kwargs):
 
 @app.task
 def get_tenants():
-    logger.info('Run get_tenants')
-    logger.info('Updating tenants DB table')
+    logger.debug('Run get_tenants')
+    logger.debug('Updating tenants DB table')
     tenant_ids = [x['id'] for x in hawkular_client().query_tenants()]
     tenants = map(lambda x: Tenant(name=x), tenant_ids)
     with db.session_man(worker_db_pool) as session:
@@ -54,7 +83,7 @@ def get_tenants():
                     name=tenant.name).count():
                 session.add(tenant)
 
-    logger.info('Run update_metrics_definitions tasks on tenants')
+    logger.debug('Run update_metrics_definitions tasks on tenants')
     group(
         update_metrics_definitions.s(tenant) for tenant in tenant_ids
     ).apply_async()
@@ -62,10 +91,10 @@ def get_tenants():
 
 @app.task
 def update_metrics_definitions(tenant):
-    logger.info('Run update_metrics_definitions({})'.format(tenant))
+    logger.debug('Run update_metrics_definitions({})'.format(tenant))
     resp = hawkular_client(tenant).query_metric_definitions()
 
-    logger.info('Update metrics DB table for {} tenant'.format(tenant))
+    logger.debug('Update metrics DB table for {} tenant'.format(tenant))
 
     metrics = map(
         lambda x: Metric(
@@ -77,9 +106,7 @@ def update_metrics_definitions(tenant):
             pod_name=dget(x, ['tags', 'pod_name']),
             object_type=dget(x, ['tags', 'type']),
             metric_type=x.get('type', None),
-            units=dget(x, ['tags', 'units']),
-            min_timestamp=x.get('minTimestamp', None),
-            max_timestamp=x.get('maxTimestamp', None)
+            units=dget(x, ['tags', 'units'])
         ), resp)
 
     collect_metrics = config['metrics_poller']['collect_metrics']
@@ -90,30 +117,25 @@ def update_metrics_definitions(tenant):
                 if not session.query(Metric).filter_by(
                         metric_id=metric.metric_id).count():
                     session.add(metric)
-                else:
-                    session.query(Metric).filter_by(
-                        metric_id=metric.metric_id).update({
-                            'min_timestamp': metric.min_timestamp,
-                            'max_timestamp': metric.max_timestamp,
-                        })
 
-    logger.info('Clean metric definitions DB table for {} tenant'.
-                format(tenant))
+    logger.debug('Check for expired metric definitions in {} tenant'.
+                 format(tenant))
 
     with db.session_man(worker_db_pool) as session:
-        for metric in session.query(Metric).all():
+        for metric in session.query(Metric).filter_by(tenant=tenant).all():
             if metric.metric_id not in [x['id'] for x in resp]:
+                logger.debug('deleting {}'.format(metric.metric_id))
                 session.delete(metric)
 
 
 @app.task
 def run_get_metrics():
-    logger.info('Run run_get_metrics')
+    logger.debug('Run run_get_metrics')
     metrics = []
     with db.session_man(worker_db_pool) as session:
         metrics = session.query(Metric).all()
 
-        logger.info('Run get_metric_data tasks for all metrics')
+        logger.debug('Run get_metric_data tasks for all metrics')
         group(
             get_metric_data.s(
                 metric.tenant,
@@ -126,8 +148,8 @@ def run_get_metrics():
 
 @app.task
 def get_metric_data(tenant, metric_id, metric_type):
-    logger.info('Run get_metrics_data({},{},{})'.
-                format(tenant, metric_id, metric_type))
+    logger.debug('Run get_metrics_data({},{},{})'.
+                 format(tenant, metric_id, metric_type))
 
     last_metric_data = None
     with db.session_man(worker_db_pool) as session:
@@ -135,31 +157,40 @@ def get_metric_data(tenant, metric_id, metric_type):
             metric_id=metric_id, tenant=tenant
         ).order_by(MetricData.timestamp.desc()).first()
 
-    max_days_old = 31
+    max_days_old = 7
     if max_days_old in config['metrics_poller']:
         max_days_old = config['metrics_poller']['max_days_old']
 
     time_start = datetime.utcnow() - timedelta(days=max_days_old)
+    next_delta = config['metrics_poller']['bucketDuration_sec'] + 1
     if last_metric_data:
-        time_start = last_metric_data.timestamp + timedelta(seconds=1)
+        time_start = last_metric_data.timestamp + timedelta(seconds=next_delta)
 
-    resp = hawkular_client(tenant).query_metric(
-        metric_types_map[metric_type],
-        metric_id,
-        start=time_start
-    )
+    try:
+        resp = hawkular_client(tenant).query_metric_stats(
+            metric_types_map[metric_type],
+            metric_id,
+            start=time_start,
+            bucketDuration='{}s'.format(config['metrics_poller']['bucketDuration_sec'])
+        )
+    except (KeyboardInterrupt, SystemExit):
+        raise
+    except Exception as e:
+        logger.error(str(e))
+        return
 
-    logger.info('Update metrics_data DB table for get_metrics_data({},{},{})'.
-                format(tenant, metric_id, metric_type))
+    logger.debug('Update metrics_data DB table for get_metrics_data({},{},{})'.
+                 format(tenant, metric_id, metric_type))
 
     metric_data = map(
         lambda x: MetricData(
             metric_id=metric_id,
             tenant=tenant,
-            timestamp=datetime.utcfromtimestamp(int(x.get('timestamp', None))/1000),
-            value=x.get('value', None) if x.get('value', None) != 'Empty' else None
+            timestamp=datetime.utcfromtimestamp(x.get('start', 0)/1000),
+            value=x.get('avg', None)
         ), resp)
 
     with db.session_man(worker_db_pool) as session:
-        for value in metric_data:
-            session.add(value)
+        for bucket in metric_data:
+            if bucket.value:
+                session.add(bucket)

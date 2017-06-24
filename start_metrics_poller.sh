@@ -1,7 +1,7 @@
 #!/bin/sh
 
-: ${worker_count:=-c 4}
-: ${log_level:=-l error}
+: ${worker_count:=4}
+: ${log_level:=error}
 : ${monitor=-E}
 
-celery -A metrics_poller worker -B $worker_count $log_level $monitor $@
+celery -A metrics_poller worker -B -c $worker_count -l $log_level $monitor $@

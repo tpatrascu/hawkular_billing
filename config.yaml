@@ -1,28 +1,28 @@
 # no keys without a value or cherrypy will fail to start
+# ${ENV_VAR} to get from env var
 
 metrics_poller:
   redis_host: localhost
   redis_port: 6379
   redis_queue_db: 0
-  redis_lock_db: 1
-  get_definitions_interval: 60
-  get_metric_data_interval: 70
+  get_definitions_interval_sec: 600
+  bucketDuration_sec: 300
   collect_metrics:
     gauge:
       - cpu/request
       - cpu/usage_rate
       - memory/request
       - memory/usage
-      - filesystem/usage
-      - network/rx_rate
-      - network/tx_rate
+      #- filesystem/usage
+      # - network/rx_rate
+      # - network/tx_rate
 
 hawkular_metrics_client:
   scheme: https
   host: metrics-openshift-infra.192.168.100.5.xip.io
   port: 443
   path: hawkular/metrics
-  token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJteXByb2plY3QiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlY3JldC5uYW1lIjoiaGF3a3VsYXItYmlsbGluZy1yZWFkZXItdG9rZW4tc2Z4dGQiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiaGF3a3VsYXItYmlsbGluZy1yZWFkZXIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiI0YmNkMGJhZS01Nzg2LTExZTctYTJkZC01NDA0YTYxMDFhYzkiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6bXlwcm9qZWN0Omhhd2t1bGFyLWJpbGxpbmctcmVhZGVyIn0.ESgfK4_hRBNwB229UykTxqW7XhpfBxrfPvuOapKyIxeLUeW4JOMk0tRyopN7RgMXOX4vKEpow_ywKFou-j5G3oOyNUKlT-xyOR3ASOi8g9e3Zalh0t5DWPJ6icSNlHhYnPmF_bcotXYkPAeAb01zsmRCN9B67nQopNuoUzg9ArOHkg1dNiQmkvvSLAue7hC9Z6-9i9DSUPJaMzDBiYKJqLiLtJ8GRxpHSPLObjXmEPlgmIi-pPdAGrg8VeSaGiOtbFqUXVW9XIMIbKouGvcpcH_KSihBxyJLgpw302a5nj84xiiPidmdZ_q-ExZ-gVbTpxO3fmpHEDpBLrNRx3nOyw
+  token: ${BEARER_TOKEN}
 
 database:
   pool_size: 20
