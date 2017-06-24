@@ -35,6 +35,7 @@ def hawkular_client(tenant_id=''):
 
 
 def dget(_dict, keys, default=None):
+    """Helper function to safely get item from nested dict."""
     for key in keys:
         if isinstance(_dict, dict):
             _dict = _dict.get(key, default)
@@ -51,11 +52,37 @@ redis_url = 'redis://{0}:{1}/{2}'.format(
 )
 app = Celery('tasks', broker=redis_url)
 logger = get_task_logger(__name__)
-worker_db_pool = None
+
+
+# Init SQLAlchemy
+connection_string = '{0}://{1}:{2}@{3}/{4}'.format(
+    config['database']['driver'],
+    config['database']['user'],
+    config['database']['password'],
+    config['database']['host'],
+    config['database']['db']
+)
+engine_args = {
+    'isolation_level': 'READ COMMITTED',
+    'pool_size': 5,
+    'pool_recycle': 3600,
+}
+session_args = {'autocommit': False, 'autoflush': False}
+
+db.migrate(connection_string)
+
+db_pool = None
+
+
+@worker_process_init.connect
+def init_worker_db_pool(sender=None, conf=None, **kwargs):
+    global db_pool
+    db_pool = db.pool(
+        connection_string, engine_args, session_args)
 
 
 @app.on_after_configure.connect
-def setup_initial_periodic_tasks(sender, **kwargs):
+def setup_periodic_tasks(sender, **kwargs):
     sender.add_periodic_task(
         config['metrics_poller']['get_definitions_interval_sec'],
         get_tenants.s())
@@ -64,19 +91,13 @@ def setup_initial_periodic_tasks(sender, **kwargs):
         run_get_metrics.s())
 
 
-@worker_process_init.connect
-def init_worker_db_pool(sender=None, conf=None, **kwargs):
-    global worker_db_pool
-    worker_db_pool = db.session_pool()
-
-
 @app.task
 def get_tenants():
     logger.debug('Run get_tenants')
     logger.debug('Updating tenants DB table')
     tenant_ids = [x['id'] for x in hawkular_client().query_tenants()]
     tenants = map(lambda x: Tenant(name=x), tenant_ids)
-    with db.session_man(worker_db_pool) as session:
+    with db.session_man(db_pool) as session:
         for tenant in tenants:
             if not session.query(Tenant).filter_by(
                     name=tenant.name).count():
@@ -109,7 +130,7 @@ def update_metrics_definitions(tenant):
         ), resp)
 
     collect_metrics = config['metrics_poller']['collect_metrics']
-    with db.session_man(worker_db_pool) as session:
+    with db.session_man(db_pool) as session:
         for metric in metrics:
             if (metric.metric_type in collect_metrics.keys() and
                 metric.descriptor_name in collect_metrics[metric.metric_type]):
@@ -120,7 +141,7 @@ def update_metrics_definitions(tenant):
     logger.debug('Check for expired metric definitions in {} tenant'.
                  format(tenant))
 
-    with db.session_man(worker_db_pool) as session:
+    with db.session_man(db_pool) as session:
         for metric in session.query(Metric).filter_by(tenant=tenant).all():
             if metric.metric_id not in [x['id'] for x in resp]:
                 logger.debug('deleting {}'.format(metric.metric_id))
@@ -131,7 +152,7 @@ def update_metrics_definitions(tenant):
 def run_get_metrics():
     logger.debug('Run run_get_metrics')
     metrics = []
-    with db.session_man(worker_db_pool) as session:
+    with db.session_man(db_pool) as session:
         metrics = session.query(Metric).all()
 
         logger.debug('Run get_metric_data tasks for all metrics')
@@ -151,7 +172,7 @@ def get_metric_data(tenant, metric_id, metric_type):
                  format(tenant, metric_id, metric_type))
 
     last_metric_data = None
-    with db.session_man(worker_db_pool) as session:
+    with db.session_man(db_pool) as session:
         last_metric_data = session.query(MetricData.timestamp).filter_by(
             metric_id=metric_id, tenant=tenant
         ).order_by(MetricData.timestamp.desc()).first()
@@ -170,7 +191,8 @@ def get_metric_data(tenant, metric_id, metric_type):
             metric_types_map[metric_type],
             metric_id,
             start=time_start,
-            bucketDuration='{}s'.format(config['metrics_poller']['bucketDuration_sec'])
+            bucketDuration='{}s'.format(
+                config['metrics_poller']['bucketDuration_sec'])
         )
     except (KeyboardInterrupt, SystemExit):
         raise
@@ -189,7 +211,7 @@ def get_metric_data(tenant, metric_id, metric_type):
             value=x.get('avg', None)
         ), resp)
 
-    with db.session_man(worker_db_pool) as session:
+    with db.session_man(db_pool) as session:
         for bucket in metric_data:
             if bucket.value:
                 session.add(bucket)

@@ -13,9 +13,9 @@ metrics_poller:
       - cpu/usage_rate
       - memory/request
       - memory/usage
-      #- filesystem/usage
-      # - network/rx_rate
-      # - network/tx_rate
+      - filesystem/usage
+      - network/rx_rate
+      - network/tx_rate
 
 hawkular_metrics_client:
   scheme: https
@@ -25,7 +25,7 @@ hawkular_metrics_client:
   token: ${BEARER_TOKEN}
 
 database:
-  pool_size: 20
+  cp_pool_size: 20
   driver: mysql+pymysql
   host: localhost
   db: hawkular_billing

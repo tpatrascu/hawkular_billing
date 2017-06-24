@@ -23,7 +23,7 @@ def replace_env_vars(config):
         else:
             m = env_var_regexp.search(str(v))
             if m:
-                v = os.environ[m.group(1)]
+                v = os.environ.get(m.group(1))
         new_config[k] = v
     return new_config
 
