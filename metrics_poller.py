@@ -12,7 +12,6 @@ from model.metric import Metric
 from model.metric_data import MetricData
 
 from config import config
-from utils import dget, redis_lock, hawkular_client, metric_types_map
 from datetime import datetime, timedelta
 
 from hawkular.metrics import HawkularMetricsClient, MetricType
