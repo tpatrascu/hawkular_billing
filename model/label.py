@@ -2,6 +2,7 @@
 
 from sqlalchemy import Column, String, ForeignKeyConstraint
 from model import Base
+from model.metric import Metric
 
 
 class Label(Base):
@@ -12,5 +13,5 @@ class Label(Base):
     tenant = Column(String(512), primary_key=True)
     metric_id = Column(String(512), primary_key=True)
     ForeignKeyConstraint(
-        ['metric_id', 'tenant'],
-        ['metrics.metric_id', 'metrics.tenant'])
+        [metric_id, tenant],
+        [Metric.metric_id, Metric.tenant])
