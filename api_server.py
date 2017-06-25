@@ -11,22 +11,10 @@ from model.tenant import Tenant
 from model.metric import Metric
 from model.metric_data import MetricData
 
-from config import config
-
-import json
+from utils import config
+from utils import _JSONEncoder
+import urllib
 import datetime
-
-
-class _JSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, datetime.date):
-            return obj.isoformat()
-        return super().default(obj)
-
-    def iterencode(self, value):
-        # Adapted from cherrypy/_cpcompat.py
-        for chunk in super().iterencode(value):
-            yield chunk.encode("utf-8")
 
 
 def json_handler(*args, **kwargs):
@@ -40,11 +28,17 @@ class MetricApi(object):
     @cherrypy.tools.json_out(handler=json_handler)
     def index(self, tenant, metric):
         db = cherrypy.request.db
-        metric = metric.replace('%2f', '/')
-        metric = metric.replace('%2F', '/')
+
         rows = db.query(MetricData.timestamp, MetricData.value) \
-            .filter_by(metric_id=metric, tenant=tenant).all()
-        return rows
+            .filter_by(
+                metric_id=urllib.parse.unquote(metric),
+                tenant=tenant
+            ).all()
+
+        return list(map(lambda x: {
+            'timestamp': x[0],
+            'value': x[1],
+        }, rows))
 
 
 @cherrypy.popargs('metric', handler=MetricApi())
@@ -53,15 +47,25 @@ class TenantApi(object):
     @cherrypy.tools.json_out(handler=json_handler)
     def index(self, tenant):
         db = cherrypy.request.db
-        rows = db.query(Metric.metric_id) \
+
+        rows = db.query(Metric.metric_id,
+                        Metric.labels,
+                        Metric.pod_name,
+                        Metric.units) \
             .filter_by(tenant=tenant).all()
-        return [x[0] for x in rows]
+
+        return list(map(lambda x: {
+            'metric_id': x[0],
+            'labels': x[1],
+            'pod_name': x[2],
+            'units': x[3],
+        }, rows))
 
 
 @cherrypy.popargs('tenant', handler=TenantApi())
 class UserApiRoot(object):
     @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @cherrypy.tools.json_out(handler=json_handler)
     def index(self):
         db = cherrypy.request.db
         rows = db.query(Tenant.name).all()

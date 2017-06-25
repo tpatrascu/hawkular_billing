@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 
+import datetime
 import os
 import re
 import yaml
+import json
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_FILE = os.path.join(APP_ROOT, 'config.yaml')
@@ -49,3 +51,15 @@ class Config(object):
 
 
 config = Config().get_config()
+
+
+class _JSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime.date):
+            return obj.isoformat()
+        return super().default(obj)
+
+    def iterencode(self, value):
+        # Adapted from cherrypy/_cpcompat.py
+        for chunk in super().iterencode(value):
+            yield chunk.encode("utf-8")

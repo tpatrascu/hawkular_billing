@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 from sqlalchemy import Column, String, Float, TIMESTAMP
-from sqlalchemy.orm import relationship
 from model import Base
 
 

@@ -8,11 +8,14 @@ from celery.utils.log import get_task_logger
 
 import model.db as db
 from model.tenant import Tenant
+from model.label import Label
 from model.metric import Metric
 from model.metric_data import MetricData
 
-from config import config
+from utils import config
 from datetime import datetime, timedelta
+import time
+import re
 
 from hawkular.metrics import HawkularMetricsClient, MetricType
 
@@ -83,11 +86,12 @@ def init_worker_db_pool(sender=None, conf=None, **kwargs):
 
 @app.on_after_configure.connect
 def setup_periodic_tasks(sender, **kwargs):
+    get_tenants.delay()
     sender.add_periodic_task(
         config['metrics_poller']['get_definitions_interval_sec'],
         get_tenants.s())
     sender.add_periodic_task(
-        config['metrics_poller']['bucketDuration_sec'] + 1,
+        config['metrics_poller']['bucketDuration_sec'],
         run_get_metrics.s())
 
 
@@ -146,6 +150,22 @@ def update_metrics_definitions(tenant):
             if metric.metric_id not in [x['id'] for x in resp]:
                 logger.debug('deleting {}'.format(metric.metric_id))
                 session.delete(metric)
+
+        session.commit()
+
+        # parse labels and insert into DB
+        for metric in resp:
+            if 'labels' in metric['tags']:
+                labels = metric['tags']['labels'].split(',')
+                for label in labels:
+                    label_data = {
+                        'key': label.split(':')[0],
+                        'value': label.split(':')[1],
+                        'metric_id': metric['id'],
+                        'tenant': metric['tenantId'],
+                    }
+                    if not session.query(Label).filter_by(**label_data).count():
+                        session.add(Label(**label_data))
 
 
 @app.task
