@@ -38,7 +38,7 @@ class MetricApi(object):
         return list(map(lambda x: {
             'timestamp': x[0],
             'value': x[1],
-        }, rows))
+            }, rows))
 
 
 @cherrypy.popargs('metric', handler=MetricApi())
@@ -54,12 +54,15 @@ class TenantApi(object):
                         Metric.units) \
             .filter_by(tenant=tenant).all()
 
+        labels_rows = db.query(Labels.key, Labels.value). \
+            .filter_by(tenant=tenant, metric_id=metric)
+
         return list(map(lambda x: {
             'metric_id': x[0],
             'labels': x[1],
             'pod_name': x[2],
             'units': x[3],
-        }, rows))
+            }, rows))
 
 
 @cherrypy.popargs('tenant', handler=TenantApi())

@@ -53,6 +53,16 @@ class Config(object):
 config = Config().get_config()
 
 
+def dget(_dict, keys, default=None):
+    """Helper function to safely get item from nested dict."""
+    for key in keys:
+        if isinstance(_dict, dict):
+            _dict = _dict.get(key, default)
+        else:
+            return default
+    return _dict
+
+
 class _JSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime.date):

@@ -12,7 +12,7 @@ from model.label import Label
 from model.metric import Metric
 from model.metric_data import MetricData
 
-from utils import config
+from utils import config, dget
 from datetime import datetime, timedelta
 import time
 import re
@@ -35,16 +35,6 @@ def hawkular_client(tenant_id=''):
         path=config['hawkular_metrics_client']['path'],
         token=config['hawkular_metrics_client']['token']
     )
-
-
-def dget(_dict, keys, default=None):
-    """Helper function to safely get item from nested dict."""
-    for key in keys:
-        if isinstance(_dict, dict):
-            _dict = _dict.get(key, default)
-        else:
-            return default
-    return _dict
 
 
 # Init Celery
@@ -162,8 +152,7 @@ def update_metrics_definitions(tenant):
                         'key': label.split(':')[0],
                         'value': label.split(':')[1],
                         'metric_id': metric['id'],
-                        'tenant': metric['tenantId'],
-                    }
+                        'tenant': metric['tenantId']}
                     if not session.query(Label).filter_by(**label_data).count():
                         session.add(Label(**label_data))
 
@@ -212,8 +201,7 @@ def get_metric_data(tenant, metric_id, metric_type):
             metric_id,
             start=time_start,
             bucketDuration='{}s'.format(
-                config['metrics_poller']['bucketDuration_sec'])
-        )
+                config['metrics_poller']['bucketDuration_sec']))
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception as e:
