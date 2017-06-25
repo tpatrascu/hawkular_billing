@@ -9,6 +9,7 @@ from cp_extend.satool import SATool
 from model.db import migrate as db_migrate
 from model.tenant import Tenant
 from model.metric import Metric
+from model.label import Label
 from model.metric_data import MetricData
 
 from utils import config
@@ -23,7 +24,7 @@ def json_handler(*args, **kwargs):
     return _JSONEncoder().iterencode(value)
 
 
-class MetricApi(object):
+class MetricDataApi(object):
     @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_handler)
     def index(self, tenant, metric):
@@ -41,8 +42,8 @@ class MetricApi(object):
             }, rows))
 
 
-@cherrypy.popargs('metric', handler=MetricApi())
-class TenantApi(object):
+@cherrypy.popargs('metric', handler=MetricDataApi())
+class MetricApi(object):
     @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_handler)
     def index(self, tenant):
@@ -54,19 +55,25 @@ class TenantApi(object):
                         Metric.units) \
             .filter_by(tenant=tenant).all()
 
-        labels_rows = db.query(Labels.key, Labels.value). \
-            .filter_by(tenant=tenant, metric_id=metric)
+        def get_metric_labels(metric_id):
+            labels_rows = db.query(Label.key, Label.value) \
+                .filter_by(tenant=tenant, metric_id=metric_id)
+            labels_dict = {}
+            for (k, v) in labels_rows:
+                labels_dict[k] = v
+            return labels_dict
 
         return list(map(lambda x: {
             'metric_id': x[0],
             'labels': x[1],
             'pod_name': x[2],
+            'labels': get_metric_labels(x[0]),
             'units': x[3],
             }, rows))
 
 
-@cherrypy.popargs('tenant', handler=TenantApi())
-class UserApiRoot(object):
+@cherrypy.popargs('tenant', handler=MetricApi())
+class TenantApi(object):
     @cherrypy.expose
     @cherrypy.tools.json_out(handler=json_handler)
     def index(self):
@@ -76,7 +83,7 @@ class UserApiRoot(object):
 
 
 def start():
-    cherrypy.tree.mount(UserApiRoot(), '/', config=config)
+    cherrypy.tree.mount(TenantApi(), '/', config=config)
     cherrypy.engine.signals.subscribe()
     cherrypy.engine.start()
     cherrypy.engine.block()
