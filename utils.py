@@ -9,9 +9,11 @@ import json
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_CONFIG_FILE = os.path.join(APP_ROOT, 'config.yaml')
 DEFAULT_CONFIG = {
-    '/static': {
+    '/': {
         'tools.staticdir.on': True,
-        'tools.staticdir.dir': os.path.join(APP_ROOT, 'static'),
+        'tools.staticdir.dir':  os.path.join(APP_ROOT, 'hawkular-billing-gui', 'dist'),
+        'tools.staticdir.index': 'index.html',
+        'tools.staticdir.debug': True,
     },
 }
 

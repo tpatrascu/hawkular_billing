@@ -82,8 +82,13 @@ class TenantApi(object):
         return [x[0] for x in rows]
 
 
+class Static(object):
+    pass
+
+
 def start():
-    cherrypy.tree.mount(TenantApi(), '/', config=config)
+    cherrypy.tree.mount(Static(), '/', config=config)
+    cherrypy.tree.mount(TenantApi(), '/user', config=config)
     cherrypy.engine.signals.subscribe()
     cherrypy.engine.start()
     cherrypy.engine.block()
