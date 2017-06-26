@@ -11,9 +11,12 @@ DEFAULT_CONFIG_FILE = os.path.join(APP_ROOT, 'config.yaml')
 DEFAULT_CONFIG = {
     '/': {
         'tools.staticdir.on': True,
-        'tools.staticdir.dir':  os.path.join(APP_ROOT, 'hawkular-billing-gui', 'dist'),
+        'tools.staticdir.dir':  os.path.join(
+            APP_ROOT,
+            'hawkular-billing-gui',
+            'dist'),
         'tools.staticdir.index': 'index.html',
-        'tools.staticdir.debug': True,
+        'tools.staticdir.debug': False,
     },
 }
 
