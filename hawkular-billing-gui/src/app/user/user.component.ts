@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
+import { Tenant } from '../types';
+import { DataService } from '../data.service';
 
 @Component({
   selector: 'app-user',
@@ -7,10 +9,11 @@ import { Component, OnInit } from '@angular/core';
   styleUrls: ['./user.component.css']
 })
 export class UserComponent implements OnInit {
+    tenants: Tenant[];
 
-  constructor() { }
+    constructor(private dataService: DataService) { }
 
-  ngOnInit() {
-
-  }
+    ngOnInit() {
+      this.tenants = this.dataService.getTenants()
+    }
 }

@@ -1,3 +1,2 @@
-<p>
-  tenant works!
-</p>
+<h1>Tenant: {{ tenant.name }}</h1>
+<app-metric [tenant]="tenant" [metric]="metric" *ngFor="let metric of tenant.metrics">

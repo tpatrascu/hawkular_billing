@@ -11,7 +11,7 @@ import { MetricDataComponent } from './metric-data/metric-data.component';
 import { MetricAggregationComponent } from './metric-aggregation/metric-aggregation.component';
 
 import { Tenant } from './types';
-import { TenantService } from './tenant.service';
+import { DataService } from './data.service';
 
 @NgModule({
   declarations: [
@@ -40,7 +40,7 @@ import { TenantService } from './tenant.service';
         },
     ])
   ],
-  providers: [TenantService],
+  providers: [DataService],
   bootstrap: [AppComponent]
 })
 export class AppModule { }

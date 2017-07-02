@@ -1,4 +1,7 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
+
+import { Tenant } from '../types'
+
 
 @Component({
   selector: 'app-tenant',
@@ -6,10 +9,11 @@ import { Component, OnInit } from '@angular/core';
   styleUrls: ['./tenant.component.css']
 })
 export class TenantComponent implements OnInit {
+    @Input() tenant: Tenant;
 
-  constructor() { }
+    constructor() { }
 
-  ngOnInit() {
-  }
+    ngOnInit() {
+    }
 
 }
